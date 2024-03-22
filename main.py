@@ -8,7 +8,7 @@ from validate_input import Validator
 
 # Example usage:
 if __name__ == "__main__":
-    filename = "sample1.pdf"
+    filename = "sample3.pdf"
     validator = Validator(filename)
     input_params = validator.process()
 

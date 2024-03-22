@@ -1,7 +1,11 @@
 import json
 import os.path
 import traceback
-
+from tabula.io import read_pdf
+import PIL.Image
+import fitz
+from PIL import Image
+import io
 import PyPDF2
 import pdfplumber
 from utils import create_folder_if_not_exists
@@ -11,7 +15,7 @@ from utils import create_folder_if_not_exists
 #     def __init__(self, file_path,**kwargs):
 #         self.file_path = file_path
 #         self.kwargs = kwargs
-# 
+#
 #     def read_text(self):
 #         try:
 #             with open(self.file_path, 'rb') as file:
@@ -52,14 +56,59 @@ class PDFProcessor:
                 extracted_tables[i + 1] = tables
         return json.dumps(extracted_tables)
 
+    def extract_tables_tabula(self, pdf_path):
+        extracted_tables = {}
+        tables = read_pdf(pdf_path, pages="all")
+        for i, table in enumerate(tables):
+            extracted_tables[i] = table.to_dict(orient='records')
+
     def extract_images(self):
         """Extracts images from all pages of the PDF."""
+
         extracted_images = {}
         for i, page in enumerate(self.pdf.pages):
             images = page.images
             if images:
+                print("Image found")
                 extracted_images[i + 1] = images
-        return extracted_images
+                for image in images:
+                    # image = page.to_image(resolution=150)
+                    if image:
+                        self.save_image(i + 1, image, output_folder=os.path.join("processed_folder", self.uuid))
+
+    def save_image(self, page_number, image, output_folder):
+        """Saves extracted image to a file."""
+        # Save image
+        image_name = f"page_{page_number}.png"
+        image_path = os.path.join(output_folder, image_name)
+        image.save(image_path)
+
+        print(f"Image saved: {image_path}")
+
+    def extract_images_from_pdf(self, pdf_path, output_dir):
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        # Open the PDF
+        pdf = fitz.open(pdf_path)
+        for i in range(len(pdf)):
+
+            page = pdf[i]
+            images = page.get_images()
+            counter = 1
+            for image in images:
+                base_img = pdf.extract_image(image[0])
+                image_data = base_img['image']
+                img = PIL.Image.open(io.BytesIO(image_data))
+                extension = base_img['ext']
+                save_to = os.path.join(output_dir, f"image_page{i + 1}_{counter}.{extension}")
+                img.save(open(save_to, 'wb'))
+
+        # Iterate through each page
+
+        # Close the PDF
+        pdf.close()
 
     # @create_folder_if_not_exists
     def save_processed(self, path, data):
@@ -86,20 +135,15 @@ class PDFProcessor:
             data=extracted_text
         )
 
-        extracted_tables = self.extract_tables()
-        self.save_processed(
-            path=os.path.join("processed_folder", self.uuid, "raw_tables.json"),
-            data=extracted_tables
-        )
-
-        extracted_images = self.extract_images()
-        for img_num, img in extracted_images.items():
+        extracted_tables = self.extract_tables_tabula(pdf_path=self.file_path)
+        if extracted_tables:
             self.save_processed(
-                path=os.path.join("processed_folder", self.uuid, f"raw_{1}.jpeg"),
-                data=img
+                path=os.path.join("processed_folder", self.uuid, "raw_tables.json"),
+                data=extracted_tables
             )
 
-
+        self.extract_images_from_pdf(pdf_path=self.file_path,
+                                     output_dir=os.path.join("processed_folder", self.uuid))
 
     def close(self):
         """Closes the PDF file."""
@@ -116,7 +160,7 @@ if __name__ == "__main__":
     # if text:
     #     print("From pyPDF2", len(text.split()))
 
-    pdf_extractor = PDFProcessor("sample1.pdf")
+    pdf_extractor = PDFProcessor("invoicesample.pdf")
 
     # Extract text
     pdf_extractor.process()
