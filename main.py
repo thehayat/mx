@@ -15,5 +15,3 @@ if __name__ == "__main__":
     extractor = PDFProcessor(file_path=filename,
                                  **input_params)
     extracted_text = extractor.process()
-
-    print()
